@@ -1,0 +1,81 @@
+{
+  "models": {
+    "openai": {
+      "gpt-3.5-turbo": {
+        "name": "GPT-3.5 Turbo",
+        "provider": "openai",
+        "max_tokens": 4000,
+        "temperature": 0.7,
+        "description": "快速高效，适合一般任务"
+      },
+      "gpt-4": {
+        "name": "GPT-4",
+        "provider": "openai",
+        "max_tokens": 8000,
+        "temperature": 0.7,
+        "description": "能力强，分析更深入"
+      },
+      "gpt-4-turbo": {
+        "name": "GPT-4 Turbo",
+        "provider": "openai",
+        "max_tokens": 128000,
+        "temperature": 0.7,
+        "description": "最新版本，性价比高"
+      },
+      "qwen-turbo": {
+        "name": "qwen-turbo",
+        "provider": "qwen",
+        "max_tokens": 4000,
+        "temperature": 0.7,
+        "description": "通义千问Turbo，阿里云大模型"
+      }
+    },
+    "anthropic": {
+      "claude-3-haiku": {
+        "name": "Claude 3 Haiku",
+        "provider": "anthropic",
+        "max_tokens": 4096,
+        "temperature": 0.7,
+        "description": "快速响应，简洁明了"
+      },
+      "claude-3-sonnet": {
+        "name": "Claude 3 Sonnet",
+        "provider": "anthropic",
+        "max_tokens": 4096,
+        "temperature": 0.7,
+        "description": "平衡性能与质量"
+      },
+      "claude-3-opus": {
+        "name": "Claude 3 Opus",
+        "provider": "anthropic",
+        "max_tokens": 4096,
+        "temperature": 0.7,
+        "description": "最强性能，质量最高"
+      }
+    },
+    "local": {
+      "llama2-7b": {
+        "name": "Llama2 7B",
+        "provider": "local",
+        "max_tokens": 2048,
+        "temperature": 0.8,
+        "description": "本地模型，无需API"
+      },
+      "qwen-7b": {
+        "name": "Qwen 7B",
+        "provider": "local",
+        "max_tokens": 2048,
+        "temperature": 0.8,
+        "description": "通义千问，中文友好"
+      }
+    }
+  },
+  "default_settings": {
+    "model": "gpt-3.5-turbo",
+    "provider": "openai",
+    "chunk_size": 1000,
+    "unit_size": 5,
+    "max_tokens": 2000,
+    "temperature": 0.7
+  }
+}
