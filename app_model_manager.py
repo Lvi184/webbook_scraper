@@ -24,7 +24,7 @@ def model_manager():
         with col1:
             provider = st.selectbox(
                 "选择提供商",
-                ["openai", "anthropic", "local"],
+                ["openai", "anthropic", "qwen", "local"],
                 key="provider"
             )
 

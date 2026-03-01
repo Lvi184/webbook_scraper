@@ -15,7 +15,6 @@ from typing import Dict, List, Any, Optional
 from pathlib import Path
 from .enhanced_text_chunker import EnhancedTextChunker, ChunkStrategy
 from .optimized_book_analyzer import OptimizedBookAnalyzer
-from .enhanced_adaptation_engine import EnhancedAdaptationEngine
 
 logger = logging.getLogger(__name__)
 
@@ -83,10 +82,12 @@ class NovelAdaptationEngine:
 
         # 2. 应用改编配置
         logger.info("步骤2: 应用改编配置")
+        # 从配置中获取目标章节数
+        target_chapters = adaptation_config.get('target_chapters', chapters_to_adapt)
         adapted_content = self._apply_adaptation_config(
             original_analysis,
             adaptation_config,
-            chapters_to_adapt,
+            target_chapters,
             target_word_count
         )
 
@@ -136,6 +137,13 @@ class NovelAdaptationEngine:
         unit_analyses = original_analysis['stage3_units_analysis']
         chapter_analyses = original_analysis['stage4_chapters_analysis']
 
+        # 限制要仿写的章节数量，确保不超出实际章节数
+        actual_chapters = len(chapter_analyses)
+        actual_units = len(units)
+        
+        # 确保不超过实际章节数
+        chapters_to_adapt = min(chapters_to_adapt, actual_chapters, actual_units)
+        
         # 限制要仿写的章节数量
         adapted_units = units[:chapters_to_adapt]
         adapted_unit_analyses = unit_analyses[:chapters_to_adapt]
@@ -229,23 +237,25 @@ class NovelAdaptationEngine:
         chapter_analyses = adapted_content['chapter_analyses']
 
         for i in range(chapters_to_adapt):
-            chapter_analysis = chapter_analyses[i]
-            chapter_number = chapter_analysis['chapter_number']
-            chapter_title = chapter_analysis['chapter_title']
+            if i < len(chapter_analyses):
+                chapter_analysis = chapter_analyses[i]
+                # 确保 chapter_number 存在
+                chapter_number = chapter_analysis.get('chapter_number', i + 1)
+                chapter_title = chapter_analysis.get('chapter_title', chapter_analysis.get('title', f"第{chapter_number}章"))
 
-            # 生成仿写章节
-            adapted_chapter = self._generate_adapted_chapter(
-                chapter_analysis,
-                adapted_content,
-                i
-            )
+                # 生成仿写章节
+                adapted_chapter = self._generate_adapted_chapter(
+                    chapter_analysis,
+                    adapted_content,
+                    i
+                )
 
-            adapted_novel['chapters'].append({
-                'chapter_number': chapter_number,
-                'chapter_title': chapter_title,
-                'adapted_content': adapted_chapter,
-                'original_analysis': chapter_analysis
-            })
+                adapted_novel['chapters'].append({
+                    'chapter_number': chapter_number,
+                    'chapter_title': chapter_title,
+                    'adapted_content': adapted_chapter,
+                    'original_analysis': chapter_analysis
+                })
 
         return adapted_novel
 
@@ -306,9 +316,9 @@ class NovelAdaptationEngine:
 
         # 获取原始章节信息
         chapter_number = chapter_analysis['chapter_number']
-        chapter_title = chapter_analysis['chapter_title']
-        original_outline = chapter_analysis['本章剧情细纲']
-        original_style = chapter_analysis['本章核心创作逻辑拆解']
+        chapter_title = chapter_analysis.get('chapter_title', chapter_analysis.get('title', f"第{chapter_number}章"))
+        original_outline = chapter_analysis.get('本章剧情细纲', chapter_analysis.get('剧情细纲', ''))
+        original_style = chapter_analysis.get('本章核心创作逻辑拆解', chapter_analysis.get('核心创作逻辑', ''))
 
         # 构建提示
         prompt = f"""
@@ -385,7 +395,8 @@ class NovelAdaptationEngine:
         if not self.analysis_data:
             raise ValueError("请先加载拆书结果")
 
-        # 使用增强的仿写引擎
+        # 创建增强仿写引擎实例
+        from .enhanced_adaptation_engine import EnhancedAdaptationEngine
         enhanced_engine = EnhancedAdaptationEngine(self.llm_client)
         enhanced_engine.analysis_data = self.analysis_data
 

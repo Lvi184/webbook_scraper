@@ -18,13 +18,8 @@ from services.novel_adaptation_engine import NovelAdaptationEngine
 from services.unified_pipeline_service import UnifiedPipelineService
 from config_loader import ConfigLoader
 
-# 页面配置
-st.set_page_config(
-    page_title="拆书仿写一体化平台",
-    page_icon="🔮",
-    layout="wide",
-    initial_sidebar_state="expanded"
-)
+# 页面配置（只在启动时设置一次）
+# 如果已经在主应用中设置，这里就不需要重复设置
 
 # 初始化session state
 if 'processing_pipeline' not in st.session_state:
@@ -37,30 +32,131 @@ if 'processing_pipeline' not in st.session_state:
         'full_results': None
     }
 
-# 页面导航
+# 确保step变量存在，如果不存在则设置为start
+current_step = st.session_state.processing_pipeline.get('step', 'start')
+
+# 页面导航 - 使用列表索引查找，如果找不到则返回-1
 pipeline_steps = [
-    "🏁 开始",
-    "📚 拆书分析",
-    "🎨 仿写配置",
-    "✍️ 执行仿写",
-    "📊 结果展示"
+    {"value": "start", "label": "🏁 开始"},
+    {"value": "analysis", "label": "📚 拆书分析"},
+    {"value": "adaptation_config", "label": "🎨 仿写配置"},
+    {"value": "execution", "label": "✍️ 执行仿写"},
+    {"value": "results", "label": "📊 结果展示"}
 ]
+
+# 确保当前步骤在列表中
+current_step = st.session_state.processing_pipeline['step']
+# 查找当前步骤的索引
+current_step_index = 0
+for i, step in enumerate(pipeline_steps):
+    if step["value"] == current_step:
+        current_step_index = i
+        break
+
+# 页面导航
+pages = {
+    "主界面": "main",
+    "模型管理": "model_manager",
+    "本地配置": "local_config"
+}
+
+# 选择页面
+selected_page = st.sidebar.selectbox(
+    "导航",
+    list(pages.keys()),
+    index=0
+)
+
+# 如果选择其他页面，显示相应内容
+if selected_page != "主界面":
+    if selected_page == "模型管理":
+        import app_model_manager
+        app_model_manager.model_manager()
+    elif selected_page == "本地配置":
+        import app_local_config
+        app_local_config.local_config()
+    st.stop()
 
 # 侧边栏 - 流程控制
 with st.sidebar:
     st.header("🔄 处理流程")
 
     # 显示当前步骤
-    current_step_index = pipeline_steps.index(st.session_state.processing_pipeline['step'])
     for i, step in enumerate(pipeline_steps):
         if i < current_step_index:
-            st.markdown(f"✅ {step}")
+            st.markdown(f"✅ {step['label']}")
         elif i == current_step_index:
-            st.markdown(f"🟡 **{step}**")
+            st.markdown(f"🟡 **{step['label']}**")
         else:
-            st.markdown(f"⚪ {step}")
+            st.markdown(f"⚪ {step['label']}")
+
+    st.markdown("---")
+    
+    # 模型配置
+    st.header("⚙️ 模型配置")
+    
+    # API Key输入
+    api_key = st.text_input(
+        "API Key",
+        type="password",
+        help="请输入您的API密钥"
+    )
+    
+    # 加载配置
+    config_loader = ConfigLoader()
+    
+    # 提供商选择
+    providers = config_loader.get_providers()
+    selected_provider = st.selectbox(
+        "选择提供商",
+        providers,
+        index=0,
+        help="选择要使用的AI模型提供商"
+    )
+    
+    # 获取当前提供商的模型
+    models = config_loader.get_models_by_provider(selected_provider)
+    
+    if selected_provider == "local":
+        # 对于本地模型，动态获取可用模型
+        try:
+            temp_client = LLMClient("", "local")
+            model_options = temp_client.get_models_for_provider("local")
+        except:
+            model_options = ["llama2", "qwen-7b"]
+    else:
+        model_options = list(models.keys())
+    
+    # 模型选择
+    selected_model = st.selectbox(
+        "选择模型",
+        model_options,
+        index=0,
+        help="选择具体使用的模型"
+    )
+    
+    # 保存配置到session state
+    st.session_state['api_key'] = api_key
+    st.session_state['selected_provider'] = selected_provider
+    st.session_state['selected_model'] = selected_model
+    
+    # 显示模型描述（对于非本地模型）
+    if selected_provider != "local" and selected_model in models:
+        model_info = models[selected_model]
+        st.info(f"**{model_info['name']}**")
+        st.caption(model_info['description'])
+        st.write(f"最大Token数: {model_info['max_tokens']}")
+        st.write(f"提供商: {model_info['provider']}")
+    elif selected_provider == "local":
+        st.info(f"**本地模型: {selected_model}**")
+        st.caption("运行在本地服务器上的模型")
+        st.write("提供商: 本地部署")
+        st.write("最大Token数: 2048 (默认)")
+    else:
+        st.warning("模型信息不可用")
 
     # 重置按钮
+    st.markdown("---")
     if st.button("重置流程"):
         st.session_state.processing_pipeline = {
             'step': 'start',
@@ -218,8 +314,19 @@ def show_analysis_step():
     if st.button("🔍 开始分析", type="primary"):
         try:
             # 加载配置
-            config = ConfigLoader.load_config()
-            llm_client = LLMClient(config)
+            config_loader = ConfigLoader()
+            
+            # 获取侧边栏的API配置
+            api_key = st.session_state.get('api_key', '')
+            selected_provider = st.session_state.get('selected_provider', 'openai')
+            selected_model = st.session_state.get('selected_model', 'gpt-3.5-turbo')
+            
+            if not api_key:
+                st.error("❌ 请先在侧边栏输入API Key")
+                return
+
+            # 初始化LLM客户端
+            llm_client = LLMClient(api_key, selected_provider, selected_model)
 
             # 解析文件
             file_parser = FileParser()
@@ -244,28 +351,29 @@ def show_analysis_step():
             st.error(f"分析失败: {str(e)}")
 
     # 如果已有分析结果，显示预览
-    if 'analysis_result' in st.session_state and st.session_state.analysis_result:
+    if st.session_state.processing_pipeline['analysis_result']:
         st.info("💡 拆书分析已完成，您可以点击「下一步」配置仿写参数")
-        display_analysis_preview(st.session_state.analysis_result)
+        display_analysis_preview(st.session_state.processing_pipeline['analysis_result'])
 
 def show_adaptation_config_step():
     """步骤3: 仿写配置"""
     st.header("🎨 仿写配置阶段")
 
-    if not st.session_state.analysis_result:
+    if not st.session_state.processing_pipeline['analysis_result']:
         st.error("请先完成拆书分析")
         return
 
     # 显示拆书结果摘要
     st.info("📊 拆书结果摘要")
-    book_info = st.session_state.analysis_result.get('book_info', {})
+    analysis_result = st.session_state.processing_pipeline['analysis_result']
+    book_info = analysis_result.get('book_info', {})
     col1, col2, col3 = st.columns(3)
     with col1:
         st.metric("章节数", book_info.get('total_chapters', 0))
     with col2:
         st.metric("剧情单元", book_info.get('total_units', 0))
     with col3:
-        st.metric("角色数量", len(st.session_state.analysis_result.get('stage2_characters', [])))
+        st.metric("角色数量", len(analysis_result.get('stage2_characters', [])))
 
     # 仿写配置表单
     with st.form("adaptation_config_form"):
@@ -332,11 +440,11 @@ def show_execution_step():
     """步骤4: 执行仿写"""
     st.header("✍️ 执行仿写创作")
 
-    if not st.session_state.analysis_result:
+    if not st.session_state.processing_pipeline['analysis_result']:
         st.error("请先完成拆书分析")
         return
 
-    if not st.session_state.adaptation_config:
+    if not st.session_state.processing_pipeline['adaptation_config']:
         st.error("请先配置仿写参数")
         return
 
@@ -344,13 +452,30 @@ def show_execution_step():
     if st.button("🚀 开始仿写", type="primary"):
         try:
             # 加载配置
-            config = ConfigLoader.load_config()
-            llm_client = LLMClient(config)
+            config_loader = ConfigLoader()
+            
+            # 获取侧边栏的API配置
+            api_key = st.session_state.get('api_key', '')
+            selected_provider = st.session_state.get('selected_provider', 'openai')
+            selected_model = st.session_state.get('selected_model', 'gpt-3.5-turbo')
+            
+            if not api_key:
+                st.error("❌ 请先在侧边栏输入API Key")
+                return
+
+            # 初始化LLM客户端
+            llm_client = LLMClient(api_key, selected_provider, selected_model)
 
             # 获取分析结果
+            analysis_result = st.session_state.processing_pipeline['analysis_result']
+            # 确保传递的是章节数据，而不是剧情单元
+            # 从原始文件解析结果中获取章节数据
+            file_parser = FileParser()
+            original_file_data = file_parser.parse_file(st.session_state.processing_pipeline['current_file'])
             file_data = {
                 'filename': Path(st.session_state.processing_pipeline['current_file']).name,
-                'chapters': st.session_state.analysis_result['stage1_units']
+                'chapters': original_file_data['chapters'],
+                'total_chapters': original_file_data['total_chapters']
             }
 
             # 执行完整流水线
@@ -359,7 +484,8 @@ def show_execution_step():
             with st.spinner("正在进行仿写创作..."):
                 full_result = pipeline_service.run_full_pipeline(
                     file_data=file_data,
-                    adaptation_config=st.session_state.adaptation_config
+                    adaptation_config=st.session_state.processing_pipeline['adaptation_config'],
+                    force_analysis=False  # 使用已有的分析结果，不重新分析
                 )
 
                 # 保存结果
@@ -374,7 +500,7 @@ def show_execution_step():
 
     # 显示配置信息
     st.info("📋 当前仿写配置")
-    st.json(st.session_state.adaptation_config)
+    st.json(st.session_state.processing_pipeline['adaptation_config'])
 
 def show_results_step():
     """步骤5: 结果展示"""
@@ -488,7 +614,11 @@ def show_progress_bar():
     current_step = st.session_state.processing_pipeline['step']
     steps = ['start', 'analysis', 'adaptation_config', 'execution', 'results']
 
-    progress = steps.index(current_step) / len(steps)
+    # 确保当前步骤在列表中
+    if current_step not in steps:
+        progress = 0
+    else:
+        progress = steps.index(current_step) / len(steps)
 
     st.progress(progress, text=f"流程进度: {progress*100:.0f}%")
 

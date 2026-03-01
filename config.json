@@ -24,6 +24,15 @@
       },
       "qwen-turbo": {
         "name": "qwen-turbo",
+        "provider": "openai",
+        "max_tokens": 4000,
+        "temperature": 0.7,
+        "description": "百炼qwen"
+      }
+    },
+    "qwen": {
+      "qwen-turbo": {
+        "name": "qwen-turbo",
         "provider": "qwen",
         "max_tokens": 4000,
         "temperature": 0.7,

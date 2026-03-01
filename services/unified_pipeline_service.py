@@ -41,7 +41,7 @@ class UnifiedPipelineService:
         self,
         file_data: Dict,
         adaptation_config: Dict,
-        force_analysis: bool = False
+        force_analysis: bool = True
     ) -> Dict:
         """
         运行完整流水线
@@ -105,6 +105,16 @@ class UnifiedPipelineService:
                 return json.load(f)
 
         # 执行新的分析
+        # 确保传递的是章节数据，而不是剧情单元
+        if 'chapters' in file_data and file_data['chapters'] and 'unit_number' in file_data['chapters'][0]:
+            # 如果是剧情单元，尝试从单元中提取章节
+            chapters = []
+            for unit in file_data['chapters']:
+                if 'chapters' in unit:
+                    chapters.extend(unit['chapters'])
+            if chapters:
+                file_data['chapters'] = chapters
+
         return self.book_analyzer.analyze_book(file_data)
 
     def _save_analysis(self, analysis_result: Dict) -> Path:

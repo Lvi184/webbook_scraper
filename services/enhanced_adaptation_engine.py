@@ -8,12 +8,13 @@ from typing import Dict, List, Any, Optional
 from pathlib import Path
 from datetime import datetime
 
-from .novel_adaptation_engine import NovelAdaptationEngine
+# 直接继承基础功能，避免循环导入
+from .llm_client import LLMClient
 
 logger = logging.getLogger(__name__)
 
 
-class EnhancedAdaptationEngine(NovelAdaptationEngine):
+class EnhancedAdaptationEngine:
     """
     增强仿写引擎
 
@@ -25,7 +26,7 @@ class EnhancedAdaptationEngine(NovelAdaptationEngine):
     """
 
     def __init__(self, llm_client, **kwargs):
-        super().__init__(llm_client, **kwargs)
+        self.llm_client = llm_client
         self.analysis_data = None
         self.creation_modes = {
             'faithful': '忠实仿写 - 保持原结构和风格',
@@ -49,6 +50,68 @@ class EnhancedAdaptationEngine(NovelAdaptationEngine):
         """基于拆书结果生成仿写内容"""
         if not self.analysis_data:
             raise ValueError("请先加载拆书结果")
+
+        # 确保 config 是一个字典
+        if not isinstance(config, dict):
+            # 如果不是字典，返回一个空的结果
+            return {
+                'config': config,
+                'metadata': {
+                    'creation_mode': 'faithful',
+                    'target_chapters': 10,
+                    'target_words': 50000,
+                    'created_at': datetime.now().isoformat()
+                },
+                'adapted_content': [],
+                'world_inspired': {
+                    'core_concepts': [],
+                    'key_settings': '',
+                    'rules': ''
+                },
+                'character_inspired': [],
+                'plot_inspired': {
+                    'core_summary': '',
+                    'key_events': {}
+                },
+                'quality_metrics': {
+                    'total_chapters': 0,
+                    'total_words': 0,
+                    'average_words_per_chapter': 0,
+                    'completeness': '未开始',
+                    'timestamp': datetime.now().isoformat()
+                }
+            }
+
+        # 确保 analysis_data 是一个字典
+        if not isinstance(self.analysis_data, dict):
+            # 如果不是字典，返回一个空的结果
+            return {
+                'config': config,
+                'metadata': {
+                    'creation_mode': config.get('mode', 'faithful'),
+                    'target_chapters': config.get('target_chapters', 10),
+                    'target_words': config.get('target_words', 50000),
+                    'created_at': datetime.now().isoformat()
+                },
+                'adapted_content': [],
+                'world_inspired': {
+                    'core_concepts': [],
+                    'key_settings': '',
+                    'rules': ''
+                },
+                'character_inspired': [],
+                'plot_inspired': {
+                    'core_summary': '',
+                    'key_events': {}
+                },
+                'quality_metrics': {
+                    'total_chapters': 0,
+                    'total_words': 0,
+                    'average_words_per_chapter': 0,
+                    'completeness': '未开始',
+                    'timestamp': datetime.now().isoformat()
+                }
+            }
 
         # 提取关键信息
         world_outline = self.analysis_data.get('stage2_world_outline', {})
@@ -114,7 +177,7 @@ class EnhancedAdaptationEngine(NovelAdaptationEngine):
 """
 
         # 添加世界观信息
-        if world_outline:
+        if world_outline and isinstance(world_outline, dict):
             prompt += f"""
 世界观背景:
 - 时空背景: {world_outline.get('基础时空背景', '未知')}
@@ -125,7 +188,7 @@ class EnhancedAdaptationEngine(NovelAdaptationEngine):
 """
 
         # 添加角色信息
-        if characters:
+        if characters and isinstance(characters, list):
             prompt += "【主要角色设定】\n"
             for char in characters[:5]:  # 限制数量避免过长
                 if isinstance(char, dict) and 'name' in char:
@@ -133,23 +196,33 @@ class EnhancedAdaptationEngine(NovelAdaptationEngine):
             prompt += "\n"
 
         # 添加剧情结构
-        if main_plot:
+        if main_plot and isinstance(main_plot, dict):
             plot_info = main_plot.get('核心大纲', {})
-            if '一句话完整概括' in plot_info:
-                prompt += f"【剧情概览】\n{plot_info['一句话完整概括']}\n\n"
-            if '全书核心剧情节点' in plot_info:
-                prompt += "【剧情结构】\n"
-                for key, value in plot_info['全书核心剧情节点'].items():
-                    prompt += f"- {key}: {value}\n"
-                prompt += "\n"
+            if isinstance(plot_info, dict):
+                if '一句话完整概括' in plot_info:
+                    prompt += f"【剧情概览】\n{plot_info['一句话完整概括']}\n\n"
+                if '全书核心剧情节点' in plot_info and isinstance(plot_info['全书核心剧情节点'], dict):
+                    prompt += "【剧情结构】\n"
+                    for key, value in plot_info['全书核心剧情节点'].items():
+                        prompt += f"- {key}: {value}\n"
+                    prompt += "\n"
 
         # 添加剧情单元
-        if units:
+        if units and isinstance(units, list):
             prompt += f"【剧情单元模板】（共{len(units)}个单元）\n"
-            for unit in units[:3]:  # 展示前3个作为示例
-                prompt += f"""
-单元{unit.get('unit_number', 0)}:
-- 主题: {unit.get('theme', '未知')}
+            for i, unit in enumerate(units[:3]):  # 展示前3个作为示例
+                # 检查是剧情单元还是章节
+                if isinstance(unit, dict):
+                    if 'unit_number' in unit:
+                        unit_num = unit['unit_number']
+                    elif 'chapter_number' in unit:
+                        unit_num = unit['chapter_number']
+                    else:
+                        unit_num = i + 1
+                    
+                    prompt += f"""
+单元{unit_num}:
+- 主题: {unit.get('theme', unit.get('title', '未知'))}
 - 内容预览: {unit.get('content', '')[:200]}...
 - 关键词: {', '.join(unit.get('keywords', []))}
 """
@@ -177,6 +250,11 @@ class EnhancedAdaptationEngine(NovelAdaptationEngine):
         """生成仿写内容"""
         # 使用LLM进行批量创作
         adapted_chapters = []
+
+        # 确保 config 是一个字典
+        if not isinstance(config, dict):
+            # 如果不是字典，返回空列表
+            return []
 
         # 根据目标章节数进行分批创作
         target_chapters = config.get('target_chapters', 10)
@@ -210,6 +288,27 @@ class EnhancedAdaptationEngine(NovelAdaptationEngine):
         # 这里需要实现章节内容的解析逻辑
         # 可以基于特定的格式进行解析
 
+        def chinese_to_arabic(chinese_num):
+            """将中文数字转换为阿拉伯数字"""
+            chinese_nums = {'零': 0, '一': 1, '二': 2, '三': 3, '四': 4, '五': 5, '六': 6, '七': 7, '八': 8, '九': 9,
+                          '十': 10, '百': 100, '千': 1000, '万': 10000}
+            if chinese_num.isdigit():
+                return int(chinese_num)
+            result = 0
+            temp = 0
+            for char in chinese_num:
+                if char in chinese_nums:
+                    if chinese_nums[char] >= 10:
+                        if temp == 0:
+                            temp = 1
+                        result += temp * chinese_nums[char]
+                        temp = 0
+                    else:
+                        temp = chinese_nums[char]
+            if temp > 0:
+                result += temp
+            return result
+
         chapters = []
         lines = response.split('\n')
 
@@ -229,7 +328,19 @@ class EnhancedAdaptationEngine(NovelAdaptationEngine):
                     })
 
                 # 开始新章
-                chapter_num = int(line.split('第')[1].split('章')[0])
+                try:
+                    # 提取章节编号部分
+                    num_part = line.split('第')[1].split('章')[0]
+                    # 尝试直接转换为整数
+                    try:
+                        chapter_num = int(num_part)
+                    except ValueError:
+                        # 如果失败，尝试转换中文数字
+                        chapter_num = chinese_to_arabic(num_part)
+                except:
+                    # 如果解析失败，使用当前章节索引
+                    chapter_num = len(chapters) + start_num
+                
                 if chapter_num >= start_num and chapter_num <= end_num:
                     current_chapter = {
                         'number': chapter_num,
@@ -249,18 +360,49 @@ class EnhancedAdaptationEngine(NovelAdaptationEngine):
                 'word_count': len(''.join(current_content))
             })
 
+        # 如果没有解析到章节，生成默认章节
+        if not chapters:
+            # 生成默认章节
+            default_chapter = {
+                'chapter_number': start_num,
+                'title': f"第{start_num}章",
+                'content': response.strip(),
+                'word_count': len(response)
+            }
+            chapters.append(default_chapter)
+
         return chapters
 
     def _extract_world_inspiration(self, world_outline: Dict) -> Dict:
         """提取世界观启发点"""
+        # 确保 world_outline 是一个字典
+        if not isinstance(world_outline, dict):
+            return {
+                'core_concepts': [],
+                'key_settings': '',
+                'rules': ''
+            }
+        
+        # 确保核心力量体系是一个字典
+        core_power = world_outline.get('核心力量体系', {})
+        if not isinstance(core_power, dict):
+            core_power = {}
+
         return {
-            'core_concepts': world_outline.get('核心力量体系', {}).get('阶段划分', []),
+            'core_concepts': core_power.get('阶段划分', core_power.get('分阶拆解能力层级', [])),
             'key_settings': world_outline.get('核心差异化设定', ''),
             'rules': world_outline.get('世界核心规则/铁则', '')
         }
 
     def _extract_character_inspiration(self, characters: List) -> List[Dict]:
         """提取角色启发点"""
+        # 确保 characters 是一个列表
+        if not isinstance(characters, list):
+            return []
+        
+        # 过滤掉非字典元素
+        valid_characters = [char for char in characters if isinstance(char, dict)]
+        
         return [
             {
                 'name': char.get('name', ''),
@@ -268,11 +410,18 @@ class EnhancedAdaptationEngine(NovelAdaptationEngine):
                 'personality': char.get('personality', ''),
                 'key_traits': char.get('key_traits', [])
             }
-            for char in characters[:10]  # 限制数量
+            for char in valid_characters[:10]  # 限制数量
         ]
 
     def _extract_plot_inspiration(self, main_plot: Dict) -> Dict:
         """提取剧情启发点"""
+        # 确保 main_plot 是一个字典
+        if not isinstance(main_plot, dict):
+            return {
+                'core_summary': '',
+                'key_events': {}
+            }
+        
         plot_info = main_plot.get('核心大纲', {})
         return {
             'core_summary': plot_info.get('一句话完整概括', ''),
@@ -281,7 +430,21 @@ class EnhancedAdaptationEngine(NovelAdaptationEngine):
 
     def _assess_quality(self, content: List[Dict]) -> Dict:
         """评估创作质量"""
-        total_words = sum(chapter.get('word_count', 0) for chapter in content)
+        # 确保 content 是一个列表
+        if not isinstance(content, list):
+            return {
+                'total_chapters': 0,
+                'total_words': 0,
+                'average_words_per_chapter': 0,
+                'completeness': '未开始',
+                'timestamp': datetime.now().isoformat()
+            }
+        
+        # 计算总字数
+        total_words = 0
+        for chapter in content:
+            if isinstance(chapter, dict):
+                total_words += chapter.get('word_count', 0)
 
         return {
             'total_chapters': len(content),

@@ -104,6 +104,10 @@ class LLMClient:
         """Qwen千问API调用"""
         import httpx
 
+        # 确保prompt不为空
+        if not prompt:
+            raise ValueError("prompt不能为空")
+
         # 使用标准的OpenAI格式
         messages = []
         if system_prompt:
@@ -118,8 +122,8 @@ class LLMClient:
         # 使用正确的API端点
         api_url = "https://dashscope.aliyuncs.com/api/v1/services/aigc/text-generation/generation"
 
-        # 使用标准格式
-        data = {
+        # 尝试使用Qwen API v2格式
+        data_v2 = {
             "model": self.model,
             "input": {
                 "messages": messages
@@ -131,45 +135,68 @@ class LLMClient:
             }
         }
 
+        # 尝试使用Qwen API v1格式
+        data_v1 = {
+            "model": self.model,
+            "prompt": prompt,
+            "temperature": temperature,
+            "max_tokens": max_tokens,
+            "top_p": 0.9
+        }
+
+        # 尝试使用OpenAI兼容格式
+        data_openai = {
+            "model": self.model,
+            "messages": messages,
+            "temperature": temperature,
+            "max_tokens": max_tokens,
+            "top_p": 0.9
+        }
+
+        # 尝试所有可能的格式
+        formats = [
+            ("v2格式", data_v2),
+            ("v1格式", data_v1),
+            ("OpenAI格式", data_openai)
+        ]
+
+        error_messages = []
+
         for attempt in range(self.max_retries):
-            try:
-                response = httpx.post(
-                    api_url,
-                    headers=headers,
-                    json=data,
-                    timeout=60
-                )
+            for format_name, data in formats:
+                try:
+                    response = httpx.post(
+                        api_url,
+                        headers=headers,
+                        json=data,
+                        timeout=60
+                    )
 
-                if response.status_code == 200:
-                    result = response.json()
-                    return result["output"]["text"]
-                else:
-                    # 尝试使用另一种格式
-                    try:
-                        alternative_data = {
-                            "model": self.model,
-                            "messages": messages,
-                            "temperature": temperature,
-                            "max_tokens": max_tokens
-                        }
-                        response = httpx.post(
-                            api_url,
-                            headers=headers,
-                            json=alternative_data,
-                            timeout=60
-                        )
-                        if response.status_code == 200:
-                            result = response.json()
-                            return result["output"]["text"]
-                    except:
-                        pass
-                    raise Exception(f"Qwen API调用失败: {response.status_code} - {response.text}")
+                    if response.status_code == 200:
+                        result = response.json()
+                        return result["output"]["text"]
+                    else:
+                        # 记录错误信息
+                        error_msg = f"{format_name}失败: {response.status_code} - {response.text}"
+                        error_messages.append(error_msg)
+                        # 继续尝试下一种格式
+                        continue
 
-            except Exception as e:
-                if attempt == self.max_retries - 1:
-                    raise Exception(f"Qwen API调用失败: {str(e)}")
+                except Exception as e:
+                    # 记录错误信息
+                    error_msg = f"{format_name}异常: {str(e)}"
+                    error_messages.append(error_msg)
+                    # 继续尝试下一种格式
+                    continue
+
+            # 所有格式都失败了，重试
+            if attempt < self.max_retries - 1:
                 time.sleep(self.retry_delay)
                 self.retry_delay *= 2
+            else:
+                # 抛出包含详细错误信息的异常
+                error_details = "\n".join(error_messages[:5])  # 只显示前5个错误
+                raise Exception(f"Qwen API调用失败: 所有格式都尝试失败\n详细错误:\n{error_details}")
 
     def _generate_anthropic(self, prompt: str, system_prompt: str = None, temperature: float = 0.7, max_tokens: int = 2000) -> str:
         """Anthropic API调用"""
