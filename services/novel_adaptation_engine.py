@@ -15,6 +15,7 @@ from typing import Dict, List, Any, Optional
 from pathlib import Path
 from .enhanced_text_chunker import EnhancedTextChunker, ChunkStrategy
 from .optimized_book_analyzer import OptimizedBookAnalyzer
+from .enhanced_adaptation_engine import EnhancedAdaptationEngine
 
 logger = logging.getLogger(__name__)
 
@@ -368,6 +369,27 @@ class NovelAdaptationEngine:
             'chapters_to_adapt': user_requirements.get('chapters_to_adapt', 3),
             'target_word_count': user_requirements.get('target_word_count', 2000)
         }
+
+    def load_analysis_result(self, analysis_path: str):
+        """加载拆书结果"""
+        import json
+        try:
+            with open(analysis_path, 'r', encoding='utf-8') as f:
+                self.analysis_data = json.load(f)
+        except Exception as e:
+            logger.error(f"加载拆书结果失败: {str(e)}")
+            raise
+
+    def generate_adaptation(self, config: Dict) -> Dict:
+        """基于拆书结果生成仿写内容"""
+        if not self.analysis_data:
+            raise ValueError("请先加载拆书结果")
+
+        # 使用增强的仿写引擎
+        enhanced_engine = EnhancedAdaptationEngine(self.llm_client)
+        enhanced_engine.analysis_data = self.analysis_data
+
+        return enhanced_engine.generate_adaptation(config)
 
 
 # 便捷函数
