@@ -5,11 +5,12 @@
 形成「顶层总纲→中层单元拆解→底层单章细节」的完整拆书闭环
 """
 
+import logging
 import json
 import re
 from typing import List, Dict, Any, Optional
 from pathlib import Path
-from enhanced_text_chunker import EnhancedTextChunker, ChunkStrategy
+from .enhanced_text_chunker import EnhancedTextChunker, ChunkStrategy
 
 logger = logging.getLogger(__name__)
 

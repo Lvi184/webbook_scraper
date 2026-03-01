@@ -23,7 +23,7 @@ def test_book_analysis():
 
         # 1. 初始化LLM客户端
         print("1. 初始化LLM客户端...")
-        api_key = "sk-5576ad8298a94cad80c1a87dfa32e4d3"
+        api_key = "sk-xxxxx"
         provider = "qwen"  # 使用qwen提供商
         model = "qwen-turbo"
 
